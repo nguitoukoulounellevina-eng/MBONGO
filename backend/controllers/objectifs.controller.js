@@ -55,6 +55,9 @@ exports.update = async (req, res, next) => {
     if (parseFloat(montant_actuel) >= parseFloat(montant_cible) && statut !== 'atteint') {
       statut = 'atteint';
     }
+    if (parseFloat(montant_actuel) < parseFloat(montant_cible) && statut === 'atteint') {
+      statut = 'en_cours';
+    }
 
     await conn.beginTransaction();
 

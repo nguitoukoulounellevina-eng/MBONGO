@@ -7,19 +7,26 @@
     "icon": "./assets/images/icon.png",
     "scheme": "monapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.mbongo.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false
+    },
+    "extra": {
+      "apiBaseUrl": "http://192.168.1.135:3000/api",
+      "router": {},
+      "eas": {
+        "projectId": "34648f31-c465-4025-8934-eab6c3fe7adf"
+      }
     },
     "web": {
       "output": "static",
@@ -40,11 +47,12 @@
         }
       ],
       "expo-secure-store",
+      "expo-notifications",
       "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     }
   }
 }

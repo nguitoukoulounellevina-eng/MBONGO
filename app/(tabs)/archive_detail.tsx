@@ -11,6 +11,27 @@ import { PageHeader } from '@/app/components/PageHeader';
 import { useTheme } from '@/app/contexts/ThemeContext';
 import { formatMonthYear } from '@/app/services/periodService';
 
+const iconMap: Record<string, string> = {
+  '🎯':'bullseye-outline','🏖️':'umbrella-outline','🏠':'home-outline','🚗':'car-outline',
+  '✈️':'airplane-outline','💻':'laptop-outline','🎓':'school-outline','💼':'briefcase-outline',
+  '💎':'diamond-outline','👛':'wallet-outline','💵':'cash-outline','☂️':'umbrella-outline',
+  '📚':'book-outline','🏥':'medkit-outline','😊':'happy-outline','🎁':'gift-outline',
+  '📱':'phone-portrait-outline','🎮':'game-controller-outline','⚽':'football-outline',
+  '🎵':'musical-notes-outline','🏋️':'fitness-outline','🐕':'paw-outline','🛒':'cart-outline',
+  '🖥️':'desktop-outline','🎧':'headset-outline','⌚':'watch-outline',
+  '🏦':'card-outline','⚠️':'warning-outline',
+  'bullseye-outline':'bullseye-outline','umbrella-outline':'umbrella-outline',
+  'home-outline':'home-outline','car-outline':'car-outline','airplane-outline':'airplane-outline',
+  'laptop-outline':'laptop-outline','school-outline':'school-outline','briefcase-outline':'briefcase-outline',
+  'diamond-outline':'diamond-outline','wallet-outline':'wallet-outline','cash-outline':'cash-outline',
+  'book-outline':'book-outline','medkit-outline':'medkit-outline','happy-outline':'happy-outline',
+  'gift-outline':'gift-outline','flag-outline':'flag-outline','cube-outline':'cube-outline',
+  'desktop-outline':'desktop-outline','headset-outline':'headset-outline','watch-outline':'watch-outline',
+  'phone-portrait-outline':'phone-portrait-outline','cart-outline':'cart-outline',
+  'card-outline':'card-outline','warning-outline':'warning-outline',
+};
+const toIcon = (val?: string) => iconMap[val||''] || 'flag-outline';
+
 export default function ArchiveDetail() {
   const insets = useSafeAreaInsets();
   const { colors: C } = useTheme();
@@ -133,7 +154,7 @@ export default function ArchiveDetail() {
           {[
             { lbl: 'Revenus', val: resume?.revenus ?? 0, color: C.green, ico: 'arrow-up' },
             { lbl: 'Dépenses', val: resume?.depenses ?? 0, color: C.danger, ico: 'arrow-down' },
-            { lbl: 'Solde', val: solde, color: solde >= 0 ? C.green : C.danger, ico: solde >= 0 ? '🏦' : '⚠️' },
+            { lbl: 'Solde', val: solde, color: solde >= 0 ? C.green : C.danger, ico: solde >= 0 ? 'card-outline' : 'warning-outline' },
           ].map((r, i) => (
             <View key={i} style={s.summaryCard}>
               <Ionicons name={r.ico} size={24} color={r.color} />
@@ -166,9 +187,38 @@ export default function ArchiveDetail() {
           );
         })()}
 
+        {/* ─── Budget Hebdomadaire ─── */}
+        {(() => {
+          const hebdo = budgets?.filter((b: any) => b.periode_type === 'hebdomadaire') || [];
+          if (hebdo.length === 0) return null;
+          const groupedByDate = hebdo.reduce((acc: Record<string, any[]>, b: any) => {
+            const key = b.date_debut || 'autre';
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(b);
+            return acc;
+          }, {});
+          return (
+            <>
+              <Text style={s.sectionTitle}>📅 Budget hebdomadaire</Text>
+              {Object.entries(groupedByDate).sort(([a], [b]) => b.localeCompare(a)).map(([date, items]) => (
+                <View key={date} style={s.card}>
+                  <Text style={s.cardTitle}>📅 {date}</Text>
+                  {items.map((b: any, i: number) => (
+                    <View key={b.id || i} style={[s.row, i === items.length - 1 && s.rowLast]}>
+                      <Text style={s.rowIco}>{b.categorie_icone || '📦'}</Text>
+                      <Text style={s.rowLbl} numberOfLines={1}>{b.categorie_libelle || 'Catégorie'}</Text>
+                      <Text style={[s.rowVal, { color: C.warning }]}>{fmt(b.montant_prevu)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </>
+          );
+        })()}
+
         {/* ─── Budget Journalier ─── */}
         {(() => {
-          const quotidiens = budgets?.filter((b: any) => b.periode_type === 'quotidien' || b.periode_type === 'hebdomadaire') || [];
+          const quotidiens = budgets?.filter((b: any) => b.periode_type === 'quotidien') || [];
           if (quotidiens.length === 0) return null;
           const groupedByDate = quotidiens.reduce((acc: Record<string, any[]>, b: any) => {
             const key = b.date_debut || 'autre';
@@ -234,7 +284,7 @@ export default function ArchiveDetail() {
             <View style={s.card}>
               {objectifs.map((o: any, i: number) => (
                 <View key={o.id || i} style={[s.row, i === objectifs.length - 1 && s.rowLast]}>
-                  <Text style={s.rowIco}>{o.icone || '🎯'}</Text>
+                  <Ionicons name={toIcon(o.icone) as any} size={16} color={C.text} style={{width:24, textAlign:'center'}} />
                   <Text style={s.rowLbl}>{o.titre}</Text>
                   <Text style={[s.rowVal, { color: o.statut === 'atteint' ? C.green : o.statut === 'annule' ? C.danger : C.warning }]}>
                     {o.statut === 'atteint' ? '✅' : o.statut === 'annule' ? '❌' : '🔄'} {fmt(o.montant_actuel)}/{fmt(o.montant_cible)}

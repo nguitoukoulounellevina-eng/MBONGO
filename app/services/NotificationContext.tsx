@@ -11,6 +11,19 @@ interface NotificationItem {
   created_at: string;
 }
 
+interface TrendAlert {
+  categorie_id: number;
+  libelle: string;
+  icone: string;
+  couleur: string;
+  montant_actuel: number;
+  montant_precedent: number;
+  montant_augmentation: number;
+  pourcentage_augmentation: number;
+  semaines_hausse: number;
+  message: string;
+}
+
 interface NotificationContextType {
   unreadCount: number;
   notifications: NotificationItem[];
@@ -19,6 +32,8 @@ interface NotificationContextType {
   refresh: () => Promise<void>;
   marquerLue: (id: number) => Promise<void>;
   toutLire: () => Promise<void>;
+  trendAlerts: TrendAlert[];
+  refreshTrends: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType>({
@@ -29,12 +44,15 @@ const NotificationContext = createContext<NotificationContextType>({
   refresh: async () => {},
   marquerLue: async () => {},
   toutLire: async () => {},
+  trendAlerts: [],
+  refreshTrends: async () => {},
 });
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [lastNotification, setLastNotification] = useState<NotificationItem | null>(null);
+  const [trendAlerts, setTrendAlerts] = useState<TrendAlert[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearLastNotification = useCallback(() => {
@@ -52,8 +70,18 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  const refreshTrends = useCallback(async () => {
+    try {
+      const data = await api.trends.alertes();
+      setTrendAlerts(Array.isArray(data) ? data : []);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     refresh();
+    refreshTrends();
     intervalRef.current = setInterval(refresh, 60000);
 
     const token = getToken();
@@ -70,7 +98,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       if (intervalRef.current) clearInterval(intervalRef.current);
       disconnectSocket();
     };
-  }, [refresh]);
+  }, [refresh, refreshTrends]);
 
   const marquerLue = useCallback(async (id: number) => {
     try {
@@ -89,7 +117,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   return (
-    <NotificationContext.Provider value={{ unreadCount, notifications, lastNotification, clearLastNotification, refresh, marquerLue, toutLire }}>
+    <NotificationContext.Provider value={{ unreadCount, notifications, lastNotification, clearLastNotification, refresh, marquerLue, toutLire, trendAlerts, refreshTrends }}>
       {children}
     </NotificationContext.Provider>
   );

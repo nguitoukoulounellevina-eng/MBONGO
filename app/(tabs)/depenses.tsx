@@ -4,7 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withRepeat, withTiming, Easing } from 'react-native-reanimated';
-import api from '@/app/services/api';
+import api, { notify } from '@/app/services/api';
 
 import { Spacing, Radius } from '@/constants/spacing';
 import { fmt, dotSep } from '@/app/utils/format';
@@ -14,6 +14,7 @@ import PeriodSelector from '@/app/components/PeriodSelector';
 import { usePeriod, formatMonthYear } from '@/app/services/periodService';
 import { ScreenWrapper, FAB_BOTTOM } from '@/app/components/ScreenWrapper';
 import { Ionicons } from '@expo/vector-icons';
+import { useToast } from '@/app/services/ToastContext';
 
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -29,32 +30,33 @@ const RED = '#E53935';
 export default function Depenses() {
   const { colors: C, isDark } = useTheme();
   const period = usePeriod();
+  const showToast = useToast();
   const s = useMemo(() => StyleSheet.create({
     root:{ flex:1, backgroundColor:C.bg },
     filterBtn:{ paddingHorizontal:Spacing.md, height:28, borderRadius:Radius.xl, backgroundColor:'rgba(255,255,255,0.12)', alignItems:'center', justifyContent:'center' },
     filterBtnActive:{ backgroundColor:'rgba(255,255,255,0.25)' },
     filterBtnTxt:{ fontSize:12, fontWeight:'700', color:'rgba(255,255,255,0.6)' },
     filterBtnTxtActive:{ color:C.white },
-    summaryCard:{ marginHorizontal:Spacing.lg, marginTop:Spacing.xl, borderRadius:Radius.xl, backgroundColor: isDark ? C.bg : C.dark, overflow:'hidden', minHeight:60 },
+    summaryCard:{ marginHorizontal:Spacing.lg, marginTop:Spacing.xl, borderRadius:Radius.xl, backgroundColor: isDark ? C.surfaceLight : C.dark, overflow:'hidden', minHeight:60 },
     summaryContent:{ padding:Spacing.md },
     summaryTop:{ flexDirection:'row', alignItems:'center', gap:Spacing.xs, marginBottom:2 },
     summaryIconWrap:{ width:20, height:20, borderRadius:5, backgroundColor:'rgba(255,255,255,0.2)', alignItems:'center', justifyContent:'center' },
     summaryIcon:{ fontSize:11 },
     summaryLbl:{ fontSize:10, fontWeight:'700', color:'rgba(255,255,255,0.7)', textTransform:'uppercase', letterSpacing:0.4 },
     summaryAmountRow:{ flexDirection:'row', alignItems:'baseline', gap:Spacing.xs, marginBottom:1 },
-    summaryAmount:{ fontSize:27, fontWeight:'900', color:C.white, letterSpacing:-0.3 },
-    summaryCurrency:{ fontSize:12, fontWeight:'600', color:'rgba(255,255,255,0.5)' },
+    summaryAmount:{ fontSize:27, fontWeight:'900', color:'#FFFFFF', letterSpacing:-0.3 },
+    summaryCurrency:{ fontSize:12, fontWeight:'600', color:'rgba(255,255,255,0.8)' },
     summaryMeta:{ flexDirection:'row', alignItems:'center', gap:6, marginBottom:2 },
-    summaryMonth:{ fontSize:10, color:'rgba(255,255,255,0.5)' },
-    summaryCount:{ fontSize:10, color:'rgba(255,255,255,0.5)' },
+    summaryMonth:{ fontSize:10, color:'rgba(255,255,255,0.75)' },
+    summaryCount:{ fontSize:10, color:'rgba(255,255,255,0.75)' },
     summaryEmptyCount:{ fontSize:10, color:'rgba(255,255,255,0.4)', fontStyle:'italic' },
     summaryEvoRow:{ flexDirection:'row', alignItems:'center', gap:2 },
     summaryEvoArrow:{ fontSize:11, fontWeight:'800' },
     summaryEvoTxt:{ fontSize:10, fontWeight:'800' },
-    summaryEvoLabel:{ fontSize:9, color:'rgba(255,255,255,0.5)' },
+    summaryEvoLabel:{ fontSize:9, color:'rgba(255,255,255,0.7)' },
     evoPositive:{ color: C.danger },
     evoNegative:{ color: C.green },
-    summaryEvoPlaceholder:{ fontSize:9, color:'rgba(255,255,255,0.4)', fontStyle:'italic' },
+    summaryEvoPlaceholder:{ fontSize:9, color:'rgba(255,255,255,0.6)', fontStyle:'italic' },
     searchRow:{ flexDirection:'row', gap:Spacing.sm, paddingHorizontal:Spacing.lg, marginTop:Spacing.lg, marginBottom:2 },
     searchBox:{ flex:1, flexDirection:'row', alignItems:'center', backgroundColor:C.white, borderRadius:Radius.md, paddingHorizontal:Spacing.md, height:38, borderWidth:1, borderColor:C.border, shadowColor:C.dark, shadowOffset:{width:0,height:2}, shadowOpacity:0.03, shadowRadius:6, elevation:2 },
     searchIco:{ fontSize:13, marginRight:6 },
@@ -309,7 +311,7 @@ export default function Depenses() {
     setLoading(false);
   };
 
-  useEffect(()=>{ load(); period.loadAvailablePeriods(); },[period.month, period.year]);
+  useEffect(()=>{ load(); period.loadAvailablePeriods(); },[period.type, period.current.debut, period.current.fin]);
 
   useEffect(()=>{
     if (showModal) {
@@ -384,6 +386,8 @@ export default function Depenses() {
       setSuccessSub(sourceMsg);
       setSuccess(true);
       checkScale.value = withSpring(1,{damping:8,stiffness:150});
+      showToast({ type: 'success', titre: editing ? 'Dépense modifiée' : 'Dépense ajoutée', message: `${label.trim()} · ${fmt(mt)}`, icone: '💸' });
+      notify('success', editing ? 'Dépense modifiée' : 'Dépense ajoutée', `${label.trim()} · ${fmt(mt)}`);
       load();
     } catch (e:any) {
       if (e.status === 409 && e.data?.warning) {
@@ -441,11 +445,13 @@ export default function Depenses() {
     Alert.alert('Supprimer',`Supprimer « ${r.label || r.libelle} » ?`,[
       { text:'Annuler', style:'cancel' },
       { text:'Confirmer', style:'destructive', onPress:async()=>{
-        try {
-          console.log('🟡 Suppression API depenses.remove id:', r.id);
-          const result = await api.depenses.remove(r.id);
-          console.log('🟢 Suppression réussie :', result);
-          load();
+          try {
+            console.log('🟡 Suppression API depenses.remove id:', r.id);
+            const result = await api.depenses.remove(r.id);
+            console.log('🟢 Suppression réussie :', result);
+            showToast({ type: 'info', titre: 'Dépense supprimée', message: `${r.label || r.libelle}`, icone: '🗑️' });
+            notify('info', 'Dépense supprimée', `${r.label || r.libelle}`);
+            load();
         } catch(e:any){
           console.log('🔴 Erreur suppression dépense :', e.message);
           Alert.alert('Erreur',e.message||'Impossible de supprimer');
@@ -478,6 +484,7 @@ export default function Depenses() {
 
       <ScrollView
         style={{ flex:1 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Carte résumé ──────────────── */}

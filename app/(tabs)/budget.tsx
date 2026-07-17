@@ -6,7 +6,7 @@ import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platfo
 import { useTheme } from '@/app/contexts/ThemeContext';
 import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
-import api from '@/app/services/api';
+import api, { notify } from '@/app/services/api';
 import { comptesCache, budgetsCache } from '@/app/services/cache';
 import { Spacing, Radius } from '@/constants/spacing';
 import { fmt, dotSep } from '@/app/utils/format';
@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import PeriodSelector from '@/app/components/PeriodSelector';
 import { usePeriod } from '@/app/services/periodService';
 import { ScreenWrapper, FAB_BOTTOM } from '@/app/components/ScreenWrapper';
+import { useToast } from '@/app/services/ToastContext';
 
 const iconMap: Record<string, string> = {
   '📦':'cube-outline','🛒':'cart-outline','🏠':'home-outline','🚗':'car-outline',
@@ -34,6 +35,7 @@ const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Aoû
 
 export default function Budget() {
   const { colors: C, isDark } = useTheme();
+  const showToast = useToast();
   const s = useMemo(() => StyleSheet.create({
   root:{ flex:1, backgroundColor:C.bg },
   scroll:{ flexGrow:1 },
@@ -332,6 +334,8 @@ export default function Budget() {
       await new Promise(r => setTimeout(r, 300));
       setSaveSuccess(true);
       checkAnim.value = withSpring(1, { damping: 8, stiffness: 150 });
+      showToast({ type: 'success', titre: 'Budget enregistré', message: `${catAmounts.length} catégorie(s) configurée(s)`, icone: '📊' });
+      notify('success', 'Budget enregistré', `${catAmounts.length} catégorie(s) configurée(s)`);
       setTimeout(() => {
         setShowBudgetModal(false);
         setSaveSuccess(false);
@@ -475,6 +479,8 @@ export default function Budget() {
             try {
               await api.budgets.remove(budget.id);
               setBudgets(prev => prev.filter(b => b.id !== budget.id));
+              showToast({ type: 'info', titre: 'Budget supprimé', message: `${budget.cat?.libelle || 'Catégorie'}`, icone: '🗑️' });
+              notify('info', 'Budget supprimé', `${budget.cat?.libelle || 'Catégorie'}`);
             } catch (e: any) {
               Alert.alert('Erreur', e.message || 'Impossible de supprimer');
             }

@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import api from './api';
+import { usePeriodContext } from '@/app/contexts/PeriodContext';
 
 export const MONTHS: string[] = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -241,10 +242,11 @@ export default PeriodService;
 
 export function usePeriod(initialType?: string, defaultToCurrent = true) {
   const now = new Date();
-  const [type, setType] = useState(initialType || 'mensuel');
+  const ctx = usePeriodContext();
+  const [type, setType] = useState(initialType || ctx.type || 'mensuel');
   const [refDate, setRefDate] = useState<Date>(now);
 
-  const period = new PeriodService(type, refDate);
+  const period = useMemo(() => new PeriodService(type, refDate), [type, refDate]);
 
   const month = period.month;
   const year = period.year;
@@ -288,7 +290,7 @@ export function usePeriod(initialType?: string, defaultToCurrent = true) {
       return `${MONTHS[m - 1]} ${y}`;
     }
     return period.label;
-  }, [period]);
+  }, [period.label]);
 
   return {
     type, setType, month, year, isCurrentMonth,

@@ -5,8 +5,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 
-import { loadAuth, getToken, clearAuth, API_BASE } from '@/app/services/api';
+import { loadAuth, getToken, getUser, clearAuth, API_BASE } from '@/app/services/api';
 import { NotificationProvider, useNotifications } from '@/app/services/NotificationContext';
+import { ToastProvider } from '@/app/services/ToastContext';
 import { registerForPushNotifications } from '@/app/services/PushNotificationService';
 import { ThemeProvider as CustomThemeProvider, useTheme } from '@/app/contexts/ThemeContext';
 import { I18nProvider } from '@/app/contexts/I18nContext';
@@ -61,7 +62,7 @@ export default function RootLayout() {
         }
       setReady(true);
       if (getToken()) {
-        registerForPushNotifications();
+        try { registerForPushNotifications(); } catch {}
       }
       setTimeout(() => {
         router.replace(getToken() ? '/(tabs)/home' : '/(tabs)');
@@ -79,13 +80,15 @@ export default function RootLayout() {
 
   return (
     <NotificationProvider>
-      <CustomThemeProvider>
-        <I18nProvider>
-          <PeriodProvider>
-            <AppNavigator />
-          </PeriodProvider>
-        </I18nProvider>
-      </CustomThemeProvider>
+      <ToastProvider>
+        <CustomThemeProvider>
+          <I18nProvider>
+            <PeriodProvider>
+              <AppNavigator key={getUser()?.id ?? 'guest'} />
+            </PeriodProvider>
+          </I18nProvider>
+        </CustomThemeProvider>
+      </ToastProvider>
     </NotificationProvider>
   );
 }

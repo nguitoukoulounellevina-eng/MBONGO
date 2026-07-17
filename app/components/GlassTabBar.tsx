@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import Animated, { useSharedValue, withSpring, useAnimatedStyle } from 'react-native-reanimated';
 import { useTheme } from '@/app/contexts/ThemeContext';
 
+
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function TabButton({
@@ -13,6 +14,7 @@ function TabButton({
   isFocused,
   color,
   activeColor,
+  badge,
 }: {
   route: any;
   descriptor: any;
@@ -72,7 +74,9 @@ function TabButton({
         onPressOut={() => { scale.value = withSpring(1, { damping: 15, stiffness: 200 }); }}
         style={[{ alignItems: 'center', justifyContent: 'center' }, animatedStyle]}
       >
-        {descriptor.options.tabBarIcon?.({ color: isFocused ? activeColor : color, size: 22 })}
+        <View style={{ position: 'relative' }}>
+          {descriptor.options.tabBarIcon?.({ color: isFocused ? activeColor : color, size: 22 })}
+        </View>
         <Text style={{ fontSize: 10, fontWeight: '700', color: isFocused ? activeColor : color, marginTop: 2 }}>
           {descriptor.options.title}
         </Text>

@@ -27,7 +27,6 @@ function initSocket(server) {
   io.on('connection', (socket) => {
     const uid = socket.utilisateurId;
     socket.join(`user:${uid}`);
-    socket.join(`user:${uid}`);
 
     socket.on('disconnect', () => {});
   });

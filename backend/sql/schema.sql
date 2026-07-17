@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
   est_actif TINYINT(1) DEFAULT 1,
   derniere_connexion DATETIME,
   photo VARCHAR(255) DEFAULT NULL,
+  profil VARCHAR(20) DEFAULT 'user',
+  tentatives_echec INT DEFAULT 0,
+  bloque_jusqua DATETIME DEFAULT NULL,
   periode_budget VARCHAR(20) DEFAULT 'mensuel',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -125,19 +128,6 @@ CREATE TABLE IF NOT EXISTS objectifs_alimentations (
   FOREIGN KEY (objectif_id) REFERENCES objectifs_epargne(id) ON DELETE CASCADE,
   FOREIGN KEY (compte_id) REFERENCES comptes(id) ON DELETE SET NULL
 );
-
-CREATE TABLE IF NOT EXISTS planning_depenses (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  utilisateur_id INT NOT NULL,
-  categorie_id INT NULL,
-  libelle VARCHAR(150) NOT NULL,
-  montant DECIMAL(15,2) NOT NULL,
-  date_prevue DATE NOT NULL,
-  est_paye TINYINT(1) DEFAULT 0,
-  FOREIGN KEY (utilisateur_id) REFERENCES utilisateurs(id) ON DELETE CASCADE,
-  FOREIGN KEY (categorie_id) REFERENCES categories(id) ON DELETE SET NULL
-);
-
 /* 8. NOTIFICATIONS */
 CREATE TABLE IF NOT EXISTS notifications (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -150,6 +140,30 @@ CREATE TABLE IF NOT EXISTS notifications (
   FOREIGN KEY (utilisateur_id) REFERENCES utilisateurs(id) ON DELETE CASCADE
 );
 
+/* 9. DEVICE TOKENS (push notifications) */
+CREATE TABLE IF NOT EXISTS device_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  utilisateur_id INT NOT NULL,
+  token VARCHAR(191) NOT NULL,
+  plateforme VARCHAR(10) DEFAULT 'unknown',
+  cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (utilisateur_id) REFERENCES utilisateurs(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_token (token)
+);
+
+/* 10. SEUILS (alertes de depenses par categorie) */
+CREATE TABLE IF NOT EXISTS seuils (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  utilisateur_id INT NOT NULL,
+  categorie_id INT NOT NULL,
+  montant_seuil DECIMAL(15,2) NOT NULL,
+  type ENUM('alerte', 'blocage') DEFAULT 'alerte',
+  est_actif TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (utilisateur_id) REFERENCES utilisateurs(id) ON DELETE CASCADE,
+  FOREIGN KEY (categorie_id) REFERENCES categories(id) ON DELETE CASCADE
+);
+
 /* Migration pour tables existantes */
 ALTER TABLE revenus ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE depenses ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
@@ -159,10 +173,7 @@ ALTER TABLE budgets ADD COLUMN IF NOT EXISTS montant_utilise DECIMAL(15,2) DEFAU
 /* Catégories quotidiennes */
 ALTER TABLE categories ADD COLUMN IF NOT EXISTS est_quotidien TINYINT(1) DEFAULT 0;
 
-/* Fusion rappels_inactivite → notifications */
-DROP TABLE IF EXISTS rappels_inactivite;
-
-/* 9. ANALYSES IA */
+/* 11. ANALYSES IA */
 CREATE TABLE IF NOT EXISTS analyses_ia (
   id INT AUTO_INCREMENT PRIMARY KEY,
   utilisateur_id INT NOT NULL,

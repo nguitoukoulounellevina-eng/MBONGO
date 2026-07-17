@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
@@ -14,6 +14,7 @@ import { Spacing, Radius } from '@/constants/spacing';
 import { useTheme } from '@/app/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { isValidEmail, isValidPhone } from '@/app/utils/validation';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function Index() {
   const { colors: C, isDark } = useTheme();
@@ -49,6 +50,8 @@ export default function Index() {
     tabTxtOn:{ color:'#FFF' },
     successBox:{ backgroundColor:'rgba(34,197,94,0.12)', borderRadius:Radius.md, padding:Spacing.md, marginBottom:Spacing.md, borderWidth:1, borderColor:C.success },
     successTxt:{ fontSize:11, color:C.green, fontWeight:'600', textAlign:'center' },
+    loginErrorBox:{ backgroundColor:'rgba(244,63,94,0.12)', borderRadius:Radius.md, padding:Spacing.md, marginBottom:Spacing.md, borderWidth:1, borderColor:C.danger },
+    loginErrorTxt:{ fontSize:11, color:C.danger, fontWeight:'600', textAlign:'center' },
     field:{ marginBottom:Spacing.md },
     lbl:{ fontSize:9, fontWeight:'700', letterSpacing:0.8, textTransform:'uppercase', color: isDark ? 'rgba(255,255,255,0.7)' : C.muted, marginBottom:Spacing.xs },
     inp:{ flexDirection:'row', alignItems:'center', gap:Spacing.sm, backgroundColor:C.surface, borderRadius:Radius.md, borderWidth:1.5, borderColor: isDark ? 'rgba(255,255,255,0.15)' : C.border, paddingHorizontal:Spacing.md, height:44 },
@@ -81,6 +84,7 @@ export default function Index() {
   const [successMsg, setSuccessMsg] = useState('');
   const [blockedUntil, setBlockedUntil] = useState<Date | null>(null);
   const [countdown, setCountdown] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
@@ -111,6 +115,20 @@ export default function Index() {
     return () => clearInterval(id);
   }, [blockedUntil]);
 
+  useFocusEffect(
+    useCallback(() => {
+      setEmail('');
+      setPassword('');
+      setPhone('');
+      setEmailError('');
+      setPassError('');
+      setSuccessMsg('');
+      setBlockedUntil(null);
+      setCountdown('');
+      setShowPass(false);
+    }, [])
+  );
+
   const shake = () => {
     Animated.sequence([
       Animated.timing(shakeAnim, { toValue:8,  duration:60, useNativeDriver:true }),
@@ -121,7 +139,7 @@ export default function Index() {
   };
 
   const clearErrors = () => {
-    setEmailError(''); setPassError(''); setSuccessMsg('');
+    setEmailError(''); setPassError(''); setSuccessMsg(''); setLoginError('');
   };
 
   const switchMode = (m) => {
@@ -169,7 +187,7 @@ export default function Index() {
           const match = msg.match(/dans (\d+) minute/);
           if (match) setBlockedUntil(new Date(Date.now() + parseInt(match[1]) * 60 * 1000));
         }
-        setEmailError(msg);
+        setLoginError(msg);
         shake();
       }
       return;
@@ -208,17 +226,13 @@ export default function Index() {
       setLoading(false); setLoadingMsg('');
       const msg = err.message || 'Échec de la connexion.';
       if (err.status === 429) {
-        setEmailError(msg);
         const match = msg.match(/dans (\d+) minute/);
         if (match) {
           const minutes = parseInt(match[1]);
           setBlockedUntil(new Date(Date.now() + minutes * 60 * 1000));
         }
-      } else if (msg.toLowerCase().includes('email')) {
-        setEmailError(msg);
-      } else {
-        setPassError(msg);
       }
+      setLoginError(msg);
       shake();
     }
   };
@@ -282,12 +296,19 @@ export default function Index() {
                   </View>
                 ) : null}
 
+                {/* Erreur login */}
+                {loginError ? (
+                  <View style={styles.loginErrorBox}>
+                    <Text style={styles.loginErrorTxt}>⚠ {loginError}</Text>
+                  </View>
+                ) : null}
+
                 {/* Email form */}
                 {mode==='Email' && (
                   <View>
                     <View style={styles.field}>
                       <Text style={styles.lbl}>Adresse e-mail</Text>
-                      <View style={[styles.inp, emailFocus && styles.inpFocus, emailError && styles.inpError]}>
+                      <View style={[styles.inp, emailFocus && styles.inpFocus]}>
                         <Text style={styles.ico}>✉️</Text>
                         <TextInput
                           style={styles.inpTxt}
@@ -297,6 +318,7 @@ export default function Index() {
                           onChangeText={t => { setEmail(t); setEmailError(''); }}
                           keyboardType="email-address"
                           autoCapitalize="none"
+                          autoCorrect={false}
                           onFocus={()=>setEmailFocus(true)}
                           onBlur={()=>setEmailFocus(false)}
                         />

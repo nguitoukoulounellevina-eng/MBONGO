@@ -10,6 +10,9 @@ const { verifierEtEnvoyerRappels } = require('./services/reminder.service');
 const { verifierRappelsDepensesJournalieres } = require('./services/daily-reminder.service');
 const { verifierSeuils } = require('./services/threshold-check.service');
 const { initSocket } = require('./services/socket.service');
+const { detecterTendances } = require('./services/trend-analysis.service');
+const { creerNotification } = require('./services/notification.service');
+const { sendPushToUser } = require('./services/push.service');
 
 const authRoutes = require('./routes/auth.routes');
 const usersRoutes = require('./routes/users.routes');
@@ -27,6 +30,7 @@ const deviceTokensRoutes = require('./routes/device-tokens.routes');
 const seuilsRoutes = require('./routes/seuils.routes');
 const abonnementsRoutes = require('./routes/abonnements.routes');
 const archiveRoutes = require('./routes/archive.routes');
+const trendRoutes = require('./routes/trend.routes');
 
 const app = express();
 const server = http.createServer(app);
@@ -48,7 +52,7 @@ app.get('/api/health', async (req, res) => {
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 50,
   message: { message: 'Trop de tentatives depuis cette adresse IP. Réessayez dans 15 minutes.' },
 });
 
@@ -69,6 +73,7 @@ app.use('/api/device-tokens', deviceTokensRoutes);
 app.use('/api/seuils', seuilsRoutes);
 app.use('/api/abonnements', abonnementsRoutes);
 app.use('/api/archive', archiveRoutes);
+app.use('/api/trends', trendRoutes);
 
 app.use(errorHandler);
 
@@ -87,9 +92,28 @@ cron.schedule('30 * * * *', () => {
   verifierSeuils();
 });
 
+cron.schedule('0 9 * * 1', async () => {
+  console.log('[Cron] Vérification des tendances (lundi 9h)...');
+  try {
+    const [users] = await pool.query(
+      'SELECT id, prenom FROM utilisateurs WHERE est_actif = 1 AND derniere_connexion < DATE_SUB(NOW(), INTERVAL 7 DAY)'
+    );
+    for (const user of users) {
+      const alertes = await detecterTendances(user.id);
+      if (alertes.length > 0) {
+        await creerNotification(user.id, 'tendance', 'Tendance à surveiller', `${alertes.length} catégorie(s) en hausse depuis 2+ semaines.`);
+        await sendPushToUser(user.id, '📊 Tendance détectée', `${user.prenom}, vos dépenses augmentent dans certaines catégories.`);
+      }
+    }
+  } catch (err) {
+    console.error('[Cron] Erreur tendances:', err.message);
+  }
+});
+
 server.listen(PORT, () => {
   console.log(`MonApp API running on http://localhost:${PORT}`);
   console.log('[Cron] Planifié : inactivité toutes les heures.');
   console.log('[Cron] Planifié : rappel dépenses à 20h.');
   console.log('[Cron] Planifié : seuils toutes les heures (min 30).');
+  console.log('[Cron] Planifié : tendances lundi à 9h.');
 });

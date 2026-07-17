@@ -16,6 +16,7 @@ import { useNotifications } from '@/app/services/NotificationContext';
 import { useTheme } from '@/app/contexts/ThemeContext';
 import { ScreenWrapper } from '@/app/components/ScreenWrapper';
 import { Ionicons } from '@expo/vector-icons';
+import TrendAlertBanner from '@/app/components/TrendAlertBanner';
 
 const now = new Date();
 
@@ -28,7 +29,7 @@ const QUICK_ACTIONS = [
 
 export default function Home() {
   const insets = useSafeAreaInsets();
-  const { unreadCount } = useNotifications();
+  const { unreadCount, trendAlerts } = useNotifications();
   const { colors: C, isDark } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const [user, setUser] = useState<any>(null);
@@ -311,6 +312,16 @@ export default function Home() {
 
         {/* ── Corps ──────────────────────────── */}
         <View style={styles.body}>
+
+          {/* 1.5 Trend Alert Banner */}
+          {trendAlerts.length > 0 && (
+            <TrendAlertBanner
+              alertes={trendAlerts}
+              colors={C}
+              onPress={() => router.push('/(tabs)/ia')}
+              onDismiss={() => {}}
+            />
+          )}
 
           {/* 2. Solde financier */}
           <View style={styles.soldeCard}>

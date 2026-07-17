@@ -388,6 +388,41 @@ const INTENTS: IntentDefinition[] = [
     },
   },
   {
+    intent: 'reduire_tendance',
+    patterns: [
+      { keywords: ['reduire', 'tendance'], weight: 0.95 },
+      { keywords: ['reduire', 'hausse'], weight: 0.9 },
+      { keywords: ['comment', 'reduire', 'depenses'], weight: 0.95 },
+      { keywords: ['comment', 'reduire', 'dépenses'], weight: 0.95 },
+      { keywords: ['comment', 'faire', 'baisser'], weight: 0.85 },
+      { keywords: ['diminuer', 'depenses'], weight: 0.9 },
+      { keywords: ['diminuer', 'dépenses'], weight: 0.9 },
+      { keywords: ['conseil', 'reduire'], weight: 0.9 },
+      { keywords: ['comment', 'economiser', 'catgorie'], weight: 0.9 },
+      { keywords: ['comment', 'economiser', 'categorie'], weight: 0.9 },
+      { keywords: ['baisser', 'depenses'], weight: 0.85 },
+      { keywords: ['baisser', 'dépenses'], weight: 0.85 },
+      { keywords: ['moins', 'depenser'], weight: 0.85 },
+      { keywords: ['moins', 'dépenser'], weight: 0.85 },
+      { keywords: ['comment', 'reduire'], weight: 0.7 },
+      { keywords: ['reduire'], weight: 0.5 },
+    ],
+    extract: (text, words) => {
+      const knownCategories: Record<string, string> = {
+        'alimentation': 'alimentation', 'transport': 'transport', 'logement': 'logement',
+        'loisir': 'loisirs', 'sant': 'santé', 'sante': 'santé', 'ducation': 'éducation',
+        'education': 'éducation', 'abonnement': 'abonnements', 'courses': 'courses',
+        'essence': 'transport', 'lectricit': 'logement', 'electricite': 'logement',
+        'eau': 'logement', 'internet': 'logement', 'tlphone': 'logement',
+        'telephone': 'logement', 'assurance': 'assurance',
+      };
+      for (const [key, cat] of Object.entries(knownCategories)) {
+        if (words.includes(key)) return { categorie: cat };
+      }
+      return {};
+    },
+  },
+  {
     intent: 'depenses_categorie',
     patterns: [
       { keywords: ['catgorie'], weight: 0.8 },

@@ -4,7 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withRepeat, withTiming, Easing } from 'react-native-reanimated';
-import api from '@/app/services/api';
+import api, { notify } from '@/app/services/api';
 import { DEFAULT_CATEGORIES } from '@/constants/categories';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Spacing, Radius } from '@/constants/spacing';
@@ -16,6 +16,7 @@ import PeriodSelector from '@/app/components/PeriodSelector';
 import { usePeriod, formatMonthYear } from '@/app/services/periodService';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenWrapper, FAB_BOTTOM } from '@/app/components/ScreenWrapper';
+import { useToast } from '@/app/services/ToastContext';
 
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -26,6 +27,7 @@ const isSameMonth = (d: string, year: number, month: number) => {
 
 export default function Revenus() {
   const { colors: C } = useTheme();
+  const showToast = useToast();
   const s = useMemo(() => StyleSheet.create({
     root:{ flex:1, backgroundColor:C.bg },
     filterBtn:{ paddingHorizontal:Spacing.md, height:28, borderRadius:Radius.xl, backgroundColor:'rgba(255,255,255,0.12)', alignItems:'center', justifyContent:'center' },
@@ -258,7 +260,7 @@ export default function Revenus() {
     setLoading(false);
   };
 
-  useEffect(()=>{load(); period.loadAvailablePeriods();},[period.month, period.year]);
+  useEffect(()=>{load(); period.loadAvailablePeriods();},[period.type, period.current.debut, period.current.fin]);
 
   useEffect(()=>{
     if (showModal) {
@@ -322,6 +324,8 @@ export default function Revenus() {
       setSuccessSub(sourceMsg);
       setSuccess(true);
       checkScale.value = withSpring(1,{damping:8,stiffness:150});
+      showToast({ type: 'success', titre: editing ? 'Revenu modifié' : 'Revenu ajouté', message: `${label.trim()} · ${fmt(mt)}`, icone: '💰' });
+      notify('success', editing ? 'Revenu modifié' : 'Revenu ajouté', `${label.trim()} · ${fmt(mt)}`);
     } catch (e:any) {
       console.log("🔴 ERREUR catch :", e.message);
       setSaving(false);
@@ -344,7 +348,7 @@ export default function Revenus() {
     Alert.alert('Supprimer',`Supprimer « ${r.label} » ?`,[
       { text:'Annuler', style:'cancel' },
       { text:'Confirmer', style:'destructive', onPress:async()=>{
-        try { await api.revenus.remove(r.id); load(); }
+        try { await api.revenus.remove(r.id); showToast({ type: 'info', titre: 'Revenu supprimé', message: `${r.label}`, icone: '🗑️' }); notify('info', 'Revenu supprimé', `${r.label}`); load(); }
         catch(e:any){ Alert.alert('Erreur',e.message||'Impossible de supprimer'); }
       }},
     ]);

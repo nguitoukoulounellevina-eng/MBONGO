@@ -86,9 +86,10 @@ export default function Stats() {
 
   const fetchData = async () => {
     try {
+      const periodParams = { debut: period.current.debut, fin: period.current.fin };
       const [r, rep, ev, g, rPrev] = await Promise.all([
-        api.stats.resume(),
-        api.stats.repartition(),
+        api.stats.resume(periodParams),
+        api.stats.repartition(periodParams),
         api.stats.evolution(),
         api.objectifs.list(),
         api.stats.resume({ mois: compareMonth, annee: compareYear }),
@@ -110,12 +111,13 @@ export default function Stats() {
     }
   };
 
-  useFocusEffect(useCallback(() => { fetchData(); period.loadAvailablePeriods(); }, [period.month, period.year, compareMonth, compareYear]));
+  useFocusEffect(useCallback(() => { fetchData(); period.loadAvailablePeriods(); }, [period.type, period.current.debut, period.current.fin, compareMonth, compareYear]));
 
   const now = useMemo(() => new Date(), []);
 
   const diff = useMemo(() => {
     if (!resumePrev || !resume) return null;
+    if (resumePrev.revenus === 0 && resumePrev.depenses === 0) return null;
     const calc = (curr: number, prev: number) => {
       const abs = curr - prev;
       const pct = prev > 0 ? ((abs / prev) * 100).toFixed(1) : (curr > 0 ? '+100' : '0');
@@ -182,14 +184,15 @@ export default function Stats() {
           <Text style={s.sectionTitle}>Résumé — {formatMonthYear(period.month, period.year)}</Text>
           <View style={s.summaryRow}>
             {[
-              { lbl:'Revenus',  val:resume?.revenus ?? 0, color:C.green,  ico:'arrow-up' },
-              { lbl:'Dépenses', val:resume?.depenses ?? 0, color:C.danger, ico:'arrow-down' },
-              { lbl:'Épargne',  val:resume?.epargne ?? 0, color: (resume?.epargne ?? 0) >= 0 ? C.blue : C.danger, ico: (resume?.epargne ?? 0) >= 0 ? '🏦' : '⚠️' },
+              { lbl:'Revenus',  val:resume?.revenus ?? 0, color:C.green,  ico:'arrow-up', desc:'Ce que vous avez gagné' },
+              { lbl:'Dépenses', val:resume?.depenses ?? 0, color:C.danger, ico:'arrow-down', desc:'Ce que vous avez dépensé' },
+              { lbl:'Solde',    val:resume?.epargne ?? 0, color: (resume?.epargne ?? 0) >= 0 ? C.green : C.danger, ico: (resume?.epargne ?? 0) >= 0 ? '🏦' : '⚠️', desc: (resume?.epargne ?? 0) >= 0 ? 'Ce qu\'il vous reste' : 'Dépassement de budget' },
             ].map((r,i)=>(
               <View key={i} style={s.summaryCard}>
                 <Ionicons name={r.ico} size={20} color={r.color} />
                 <Text style={s.summaryVal}>{fmt(r.val)}</Text>
                 <Text style={s.summaryLbl}>{r.lbl}</Text>
+                <Text style={{ fontSize: 10, color: C.muted, marginTop: 2, textAlign: 'center' }}>{r.desc}</Text>
                 {i === 2 && resume?.objectif_cible && resume.objectif_cible > 0 && (
                   <Text style={s.savingsRate}>Progression : {resume.taux_progression}%</Text>
                 )}
@@ -198,34 +201,54 @@ export default function Stats() {
           </View>
 
           {/* ─── Comparaison automatique ─── */}
-          {diff && (
+          {diff ? (
             <View style={[s.card, { marginTop: Spacing.sm }]}>
               <Text style={s.cardTitle}>📊 Comparaison avec {formatMonthYear(compareMonth, compareYear)}</Text>
               {[
                 { label: 'Revenus', d: diff.revenus, ico: '📈', colorUp: C.green, colorDown: C.danger },
                 { label: 'Dépenses', d: diff.depenses, ico: '💳', colorUp: C.danger, colorDown: C.green },
-                { label: 'Épargne', d: diff.epargne, ico: '🏦', colorUp: C.green, colorDown: C.danger },
+                { label: 'Solde', d: diff.epargne, ico: '🏦', colorUp: C.green, colorDown: C.danger },
               ].map((item, i) => {
                 const isUp = item.d.dir === 'up';
                 const isDown = item.d.dir === 'down';
+                const isSame = item.d.dir === 'same';
                 const clr = isUp ? item.colorUp : isDown ? item.colorDown : C.muted;
-                const arrow = isUp ? 'arrow-up' : isDown ? 'arrow-down' : 'remove';
+                const compareLabel = formatMonthYear(compareMonth, compareYear);
+                let phrase: string;
+                if (isSame) {
+                  phrase = `Identique à ${compareLabel}`;
+                } else if (isUp) {
+                  phrase = `${fmt(Math.abs(item.d.abs))} de plus que ${compareLabel}`;
+                } else {
+                  phrase = `${fmt(Math.abs(item.d.abs))} de moins que ${compareLabel}`;
+                }
+                const tendance = isSame ? null : isUp ? `Hausse de ${item.d.pct}%` : `Baisse de ${item.d.pct}%`;
                 return (
-                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm, borderBottomWidth: i < 2 ? 1 : 0, borderBottomColor: C.border }}>
-                    <Text style={{ fontSize: 15, width: 24 }}>{item.ico}</Text>
-                    <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: C.text }}>{item.label}</Text>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ fontSize: 13, fontWeight: '800', color: clr }}>
-                        {item.d.abs >= 0 ? '+' : ''}{fmt(item.d.abs)}
+                  <View key={i} style={{ paddingVertical: Spacing.sm, borderBottomWidth: i < 2 ? 1 : 0, borderBottomColor: C.border }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                      <Text style={{ fontSize: 15, width: 24 }}>{item.ico}</Text>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: C.text }}>{item.label}</Text>
+                    </View>
+                    <View style={{ paddingLeft: 24 }}>
+                      <Text style={{ fontSize: 12, color: clr, fontWeight: '600' }}>
+                        {phrase}
                       </Text>
-                      <View style={{ flexDirection:'row', alignItems:'center' }}>
-                        <Ionicons name={arrow} size={11} color={clr} />
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: clr, marginLeft:2 }}>{item.d.pct}%</Text>
-                      </View>
+                      {tendance && (
+                        <Text style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                          {tendance}
+                        </Text>
+                      )}
                     </View>
                   </View>
                 );
               })}
+            </View>
+          ) : resume && (
+            <View style={[s.card, { marginTop: Spacing.sm }]}>
+              <Text style={s.cardTitle}>📊 Pas de comparaison possible</Text>
+              <Text style={{ fontSize: 12, color: C.muted, lineHeight: 18 }}>
+                Ajoutez des données sur {formatMonthYear(compareMonth, compareYear)} pour voir l'évolution avec cette période.
+              </Text>
             </View>
           )}
 

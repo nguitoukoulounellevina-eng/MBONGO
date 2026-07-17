@@ -230,24 +230,16 @@ export default function PeriodSelector({
   }
 
   const periods = useMemo(() => {
-    if (availablePeriods && availablePeriods.length > 0 && periodType !== 'quotidien' && periodType !== 'hebdomadaire') {
-      return availablePeriods.map(p => ({
-        ...p,
-        label: p.label || `${MONTHS[p.mois! - 1]} ${p.annee}`,
-      }));
-    }
-
-    if (periodType === 'quotidien') {
-      const days: (PeriodOption & { date?: Date })[] = [];
-      for (let i = 0; i < 30; i++) {
-        const d = addDays(now, -i);
-        const lab = i === 0 ? "Aujourd'hui" : i === 1 ? 'Hier' : `${DAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
-        days.push({ date: d, mois: d.getMonth() + 1, annee: d.getFullYear(), label: lab });
+    if (periodType === 'quotidien' || periodType === 'hebdomadaire') {
+      if (periodType === 'quotidien') {
+        const days: (PeriodOption & { date?: Date })[] = [];
+        for (let i = 0; i < 30; i++) {
+          const d = addDays(now, -i);
+          const lab = i === 0 ? "Aujourd'hui" : i === 1 ? 'Hier' : `${DAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+          days.push({ date: d, mois: d.getMonth() + 1, annee: d.getFullYear(), label: lab });
+        }
+        return days;
       }
-      return days;
-    }
-
-    if (periodType === 'hebdomadaire') {
       const weeks: (PeriodOption & { date?: Date })[] = [];
       for (let i = 0; i < 12; i++) {
         const mon = getMonday(addDays(now, -i * 7));
@@ -260,6 +252,17 @@ export default function PeriodSelector({
         weeks.push({ date: mon, mois: mon.getMonth() + 1, annee: mon.getFullYear(), label: lab });
       }
       return weeks;
+    }
+
+    if (availablePeriods && availablePeriods.length > 0) {
+      return availablePeriods.map(p => ({
+        ...p,
+        label: p.label || `${MONTHS[p.mois! - 1]} ${p.annee}`,
+      }));
+    }
+
+    if (availablePeriods && availablePeriods.length === 0) {
+      return [{ mois: currentM, annee: currentY, label: `${MONTHS[currentM - 1]} ${currentY}` }];
     }
 
     const result: PeriodOption[] = [];
@@ -314,7 +317,7 @@ export default function PeriodSelector({
                   <TouchableOpacity
                     key={t.value}
                     style={[s.typeChip, periodType === t.value && s.typeChipActive]}
-                    onPress={() => { onTypeChange(t.value); setOpen(false); }}
+                    onPress={() => { onTypeChange(t.value); }}
                     activeOpacity={0.7}
                   >
                     <Ionicons name={t.icon} size={12} color={periodType === t.value ? '#fff' : C.muted} />
@@ -396,14 +399,16 @@ export default function PeriodSelector({
                         <Text style={[s.itemText, selectedMonth === currentM && selectedYear === currentY && s.itemTextActive]}>📅 Ce mois</Text>
                         {selectedMonth === currentM && selectedYear === currentY && <Text style={s.itemCheck}>✓</Text>}
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[s.item, selectedMonth === prevM && selectedYear === prevY && s.itemActive]}
-                        onPress={() => { onChange(prevM, prevY); setOpen(false); }}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[s.itemText, selectedMonth === prevM && selectedYear === prevY && s.itemTextActive]}>📅 Mois précédent</Text>
-                        {selectedMonth === prevM && selectedYear === prevY && <Text style={s.itemCheck}>✓</Text>}
-                      </TouchableOpacity>
+                      {availablePeriods && availablePeriods.some(p => p.mois === prevM && p.annee === prevY) && (
+                        <TouchableOpacity
+                          style={[s.item, selectedMonth === prevM && selectedYear === prevY && s.itemActive]}
+                          onPress={() => { onChange(prevM, prevY); setOpen(false); }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[s.itemText, selectedMonth === prevM && selectedYear === prevY && s.itemTextActive]}>📅 Mois précédent</Text>
+                          {selectedMonth === prevM && selectedYear === prevY && <Text style={s.itemCheck}>✓</Text>}
+                        </TouchableOpacity>
+                      )}
                       <View style={{ height: 1, backgroundColor: C.border, marginVertical: Spacing.sm, marginHorizontal: Spacing.lg }} />
                     </>
                   )}

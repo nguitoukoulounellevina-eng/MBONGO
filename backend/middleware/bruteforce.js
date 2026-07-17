@@ -44,7 +44,7 @@ exports.enregistrerEchec = async (email, telephone) => {
 
     const newCount = (rows[0].tentatives_echec || 0) + 1;
     if (newCount >= 5) {
-      const bloqueJusqua = new Date(Date.now() + 10 * 60 * 1000);
+      const bloqueJusqua = new Date(Date.now() + 5 * 60 * 1000);
       await pool.query(
         `UPDATE utilisateurs SET tentatives_echec = ?, bloque_jusqua = ? WHERE ${field} = ?`,
         [newCount, bloqueJusqua, value]

@@ -143,7 +143,7 @@ function IconRenderer({ icone, size, color, style }: { icone: string; size?: num
 }
 
 interface Block {
-  type: 'text' | 'budget' | 'depense' | 'objectif' | 'compte' | 'statistique' | 'actions' | 'bienvenue' | 'remarques' | 'conseil' | 'guide' | 'priorite' | 'score';
+  type: 'text' | 'budget' | 'depense' | 'objectif' | 'compte' | 'statistique' | 'actions' | 'bienvenue' | 'remarques' | 'conseil' | 'guide' | 'priorite' | 'score' | 'tendance';
   data: any;
 }
 
@@ -1109,6 +1109,51 @@ async function buildTendancesBlocks(params: Record<string, any>): Promise<Block[
   }
 }
 
+async function buildTendanceRecoBlocks(params: Record<string, any>): Promise<Block[]> {
+  try {
+    const catId = params.categorieId || params.categorie_id || 0;
+    if (!catId) {
+      const alertes = await api.trends.alertes();
+      const list = Array.isArray(alertes) ? alertes : [];
+      if (list.length === 0) {
+        return [{ type: 'text', data: { text: 'Aucune tendance en hausse détectée en ce moment. Vos finances sont stables !' } }];
+      }
+      const alerte = list[0];
+      const data: TendanceData = {
+        categorie_id: alerte.categorie_id,
+        libelle: alerte.libelle,
+        icone: alerte.icone || '📊',
+        couleur: alerte.couleur || '#F59E0B',
+        montant_actuel: alerte.montant_actuel,
+        montant_precedent: alerte.montant_precedent,
+        montant_augmentation: alerte.montant_augmentation,
+        pourcentage_augmentation: alerte.pourcentage_augmentation,
+        semaines_hausse: alerte.semaines_hausse,
+        message: alerte.message,
+      };
+      const recos = await api.trends.recommandations(alerte.categorie_id);
+      data.recommandations = Array.isArray(recos) ? recos : [];
+      return [
+        { type: 'text', data: { text: `📊 **Analyse de la hausse : ${alerte.libelle}**\n\n${alerte.message}\n\nVoici comment réduire cette catégorie :` } },
+        { type: 'tendance', data },
+        { type: 'actions', data: { actions: [{ label: '📊 Voir les statistiques', route: 'stats' }, { label: '📋 Voir mes dépenses', route: 'depenses' }] } },
+      ];
+    }
+    const recos = await api.trends.recommandations(catId);
+    const list = Array.isArray(recos) ? recos : [];
+    if (list.length === 0) {
+      return [{ type: 'text', data: { text: 'Je n\'ai pas de recommandations spécifiques pour cette catégorie.' } }];
+    }
+    const lines = list.map((r: any) => `• **${r.titre}** : ${r.detail}${r.impact ? ` → ${r.impact}` : ''}`).join('\n');
+    return [
+      { type: 'text', data: { text: `💡 **Comment réduire vos dépenses :**\n\n${lines}` } },
+      { type: 'actions', data: { actions: [{ label: '📊 Voir les statistiques', route: 'stats' }] } },
+    ];
+  } catch {
+    return [{ type: 'text', data: { text: 'Je n\'ai pas pu récupérer les recommandations pour le moment.' } }];
+  }
+}
+
 async function buildDepensesCategorieBlocks(params: Record<string, any>): Promise<Block[]> {
   try {
     const { debut, fin } = periodFromParams(params);
@@ -1681,6 +1726,8 @@ async function buildIntentResponse(intent: string, params: Record<string, any>, 
       return buildTendancesBlocks(params);
     case 'tendance_categorie':
       return buildTendancesBlocks(params);
+    case 'reduire_tendance':
+      return buildTendanceRecoBlocks(params);
     case 'depenses_categorie':
       return buildDepensesCategorieBlocks(params);
     case 'abonnements':
@@ -1882,7 +1929,7 @@ const createBriefing = (user: any, lastVisit: string | null, lastTopic: string |
 
 /* -- Nouveau briefing intelligent (Sprint 1) -- */
 
-function createSmartBriefing(context: { userName?: string; lastVisit?: string | null; periodeType?: string; isNewUser?: boolean }, brief: MotemaBriefingData): RichMessage[] {
+async function createSmartBriefing(context: { userName?: string; lastVisit?: string | null; periodeType?: string; isNewUser?: boolean }, brief: MotemaBriefingData): Promise<RichMessage[]> {
   const prenom = context.userName || 'Utilisateur';
   const now = new Date();
   const pt = context.periodeType || 'mensuel';
@@ -1926,12 +1973,49 @@ function createSmartBriefing(context: { userName?: string; lastVisit?: string | 
 
   lines.push(`\n💡 **Voir mon analyse**  ·  **Conseils personnalisés**  ·  **Mes objectifs**`);
 
-  return [{
+  const msgs: RichMessage[] = [{
     id: 'briefing-1',
     sender: 'motema',
     blocks: [{ type: 'text', data: { text: lines.join('\n') } }],
     timestamp: now,
   }];
+
+  try {
+    const alertes = await api.trends.alertes();
+    const list = Array.isArray(alertes) ? alertes : [];
+    if (list.length > 0) {
+      const alerte = list[0];
+      const recos = await api.trends.recommandations(alerte.categorie_id);
+      const tendanceData: TendanceData = {
+        categorie_id: alerte.categorie_id,
+        libelle: alerte.libelle,
+        icone: alerte.icone || '📊',
+        couleur: alerte.couleur || '#F59E0B',
+        montant_actuel: alerte.montant_actuel,
+        montant_precedent: alerte.montant_precedent,
+        montant_augmentation: alerte.montant_augmentation,
+        pourcentage_augmentation: alerte.pourcentage_augmentation,
+        semaines_hausse: alerte.semaines_hausse,
+        message: alerte.message,
+        recommandations: Array.isArray(recos) ? recos : [],
+      };
+      msgs.push({
+        id: 'briefing-tendance',
+        sender: 'motema',
+        blocks: [
+          { type: 'text', data: { text: `⚠️ **Tendance à surveiller**\n\n${alerte.message}` } },
+          { type: 'tendance', data: tendanceData },
+          { type: 'actions', data: { actions: [
+            { label: '📊 Voir les statistiques', route: 'stats' },
+            { label: '💡 Comment réduire ?', type: 'message', text: `Comment réduire ${alerte.libelle} ?` },
+          ] } },
+        ],
+        timestamp: new Date(),
+      });
+    }
+  } catch { /* tendance silencieuse dans le briefing */ }
+
+  return msgs;
 }
 
 // -- Hook styles partagés --
@@ -2445,6 +2529,8 @@ const BlockRenderer = React.memo(function BlockRenderer({ block, isUser, isFirst
         return <CompteCard data={block.data} />;
       case 'statistique':
         return <StatsCard data={block.data} />;
+      case 'tendance':
+        return <TendanceCard data={block.data} onAction={onAction} />;
       case 'actions':
         return <ActionsBar actions={block.data.actions} onAction={onAction} />;
       case 'guide':
@@ -2634,6 +2720,109 @@ const ActionsRow = React.memo(function ActionsRow({ actions }: { actions: BlockA
           <Text style={{ fontSize: 11, fontWeight: '700', color: '#7C3AED' }}>{a.label}</Text>
         </TouchableOpacity>
       ))}
+    </View>
+  );
+});
+
+/* -- TendanceCard -- */
+interface TendanceData {
+  categorie_id: number;
+  libelle: string;
+  icone: string;
+  couleur: string;
+  montant_actuel: number;
+  montant_precedent: number;
+  montant_augmentation: number;
+  pourcentage_augmentation: number;
+  semaines_hausse: number;
+  message: string;
+  recommandations?: { type: string; titre: string; detail: string; impact: string }[];
+}
+
+const TendanceCard = React.memo(function TendanceCard({ data, onAction }: { data: TendanceData; onAction?: (action: BlockAction) => void }) {
+  const { colors: C } = useChatStyles();
+  return (
+    <View style={{
+      backgroundColor: '#FFF7ED',
+      borderRadius: 14,
+      padding: Spacing.md,
+      marginBottom: Spacing.sm,
+      borderWidth: 1,
+      borderColor: '#FCD34D',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 6,
+      elevation: 3,
+    }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm }}>
+        <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: data.couleur + '20', alignItems: 'center', justifyContent: 'center' }}>
+          <IconRenderer icone={data.icone} size={16} color={data.couleur} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: C.dark }}>{data.libelle}</Text>
+          <Text style={{ fontSize: 11, color: '#92400E', fontWeight: '600' }}>
+            Tendance en hausse depuis {data.semaines_hausse} semaines
+          </Text>
+        </View>
+        <View style={{ backgroundColor: '#FEF3C7', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
+          <Text style={{ fontSize: 12, fontWeight: '800', color: '#D97706' }}>+{data.pourcentage_augmentation}%</Text>
+        </View>
+      </View>
+
+      <View style={{ backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 10, padding: Spacing.sm, marginBottom: Spacing.sm, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <View>
+          <Text style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Ce mois</Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: C.danger }}>{fmt(data.montant_actuel)} F</Text>
+        </View>
+        <View>
+          <Text style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Mois précédent</Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: C.muted }}>{fmt(data.montant_precedent)} F</Text>
+        </View>
+        <View>
+          <Text style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Écart</Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: C.danger }}>+{fmt(data.montant_augmentation)} F</Text>
+        </View>
+      </View>
+
+      <Text style={{ fontSize: 12, color: '#A16207', lineHeight: 17, marginBottom: Spacing.sm }}>
+        {data.message}
+      </Text>
+
+      {data.recommandations && data.recommandations.length > 0 && (
+        <View style={{ marginTop: 4 }}>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400E', marginBottom: 4 }}>💡 Comment réduire :</Text>
+          {data.recommandations.map((r, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 6 }}>
+              <Text style={{ fontSize: 10, marginTop: 1 }}>{r.type === 'reduction' ? '📉' : r.type === 'alternatives' ? '🔄' : '💡'}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: C.dark }}>{r.titre}</Text>
+                <Text style={{ fontSize: 11, color: C.muted, lineHeight: 16 }}>{r.detail}</Text>
+                {r.impact ? (
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: C.green, marginTop: 2 }}>→ {r.impact}</Text>
+                ) : null}
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, borderTopWidth: 1, borderTopColor: '#FDE68A', paddingTop: 8 }}>
+        <TouchableOpacity
+          style={{ backgroundColor: '#F59E0B18', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 12 }}
+          onPress={() => onAction?.({ label: 'Réduire', type: 'message', text: `Comment réduire ${data.libelle} ?` })}
+          activeOpacity={0.7}
+        >
+          <Text style={{ fontSize: 11, fontWeight: '700', color: '#D97706' }}>Comment réduire ?</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ backgroundColor: '#7C3AED14', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 12 }}
+          onPress={() => onAction?.({ label: 'Voir les stats', route: 'stats' })}
+          activeOpacity={0.7}
+        >
+          <Text style={{ fontSize: 11, fontWeight: '700', color: '#7C3AED' }}>Voir les stats</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 });
@@ -3131,7 +3320,7 @@ export default function IA() {
         };
 
         const brief = await getMotemaBriefing(context);
-        const briefingMsgs = createSmartBriefing(
+        const briefingMsgs = await createSmartBriefing(
           { userName: user?.prenom, lastVisit, periodeType: iaPeriodType, isNewUser: visitCount === 0 },
           brief,
         );

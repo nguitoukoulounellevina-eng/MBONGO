@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { clearAllCache } from './cache';
+import { clearAnalyseRapport } from './analyseCache';
 
 const STORAGE_KEYS = { TOKEN: 'auth_token', USER: 'auth_user', ONBOARDING: 'onboarding_done', GUIDED_TOUR: 'guided_tour_done' };
 const isWeb = Platform.OS === 'web';
@@ -25,8 +26,11 @@ const API_PORT = '3000';
 function getApiBaseUrl() {
   if (isWeb) return `http://localhost:${API_PORT}/api`;
   const hostUri = Constants.expoConfig?.hostUri;
-  const ip = hostUri ? hostUri.split(':')[0] : 'localhost';
-  return `http://${ip}:${API_PORT}/api`;
+  if (hostUri) {
+    const ip = hostUri.split(':')[0];
+    return `http://${ip}:${API_PORT}/api`;
+  }
+  return Constants.expoConfig?.extra?.apiBaseUrl || `http://localhost:${API_PORT}/api`;
 }
 
 export const API_BASE = getApiBaseUrl();
@@ -84,7 +88,19 @@ export const clearAuth = () => {
   setToken(null);
   setUser(null);
   clearAllCache();
+  clearAnalyseRapport();
   for (const key of apiCache.keys()) apiCache.delete(key);
+};
+
+export const notify = (type: string, titre: string, message: string) => {
+  const t = _token;
+  if (!t) return;
+  const url = `${API_BASE}/notifications`;
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
+    body: JSON.stringify({ type, titre, message }),
+  }).catch(() => {});
 };
 
 interface RequestOptions {
@@ -162,9 +178,11 @@ async function request(endpoint: string, options: RequestOptions = {}) {
   const data = await response.json();
 
   if (response.status === 401) {
-    clearAuth();
-    router.replace('/(tabs)');
-    throw new Error('Session expirée. Veuillez vous reconnecter.');
+    if (!endpoint.includes('/auth/login')) {
+      clearAuth();
+      router.replace('/(tabs)');
+    }
+    throw new Error(data.message || 'Session expirée. Veuillez vous reconnecter.');
   }
 
   if (!response.ok) {
@@ -320,6 +338,8 @@ export const api = {
   notifications: {
     list: () => request('/notifications'),
     nonLues: () => request('/notifications/non-lues'),
+    create: (data: { type?: string; titre: string; message: string }) =>
+      request('/notifications', { method: 'POST', body: data }),
     marquerLue: (id: number) => request(`/notifications/${id}/lire`, { method: 'PUT' }),
     toutLire: () => request('/notifications/tout-lire', { method: 'PUT' }),
     remove: (id: number) => request(`/notifications/${id}`, { method: 'DELETE' }),
@@ -380,6 +400,11 @@ export const api = {
     periods: () => request('/archive/periods'),
     months: () => request('/archive/periods'),
     summary: (params?: PeriodQuery) => request(`/archive/summary${buildPeriodQuery(params)}`),
+  },
+
+  trends: {
+    alertes: () => request('/trends/alertes'),
+    recommandations: (categorieId: number) => request(`/trends/recommandations/${categorieId}`),
   },
 };
 

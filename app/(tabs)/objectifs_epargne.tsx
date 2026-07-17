@@ -4,12 +4,13 @@ import { ActivityIndicator, Alert, Dimensions, Keyboard, KeyboardAvoidingView, M
 import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import api from '@/app/services/api';
+import api, { notify } from '@/app/services/api';
 import { Spacing, Radius } from '@/constants/spacing';
 import { fmt } from '@/app/utils/format';
 import { useTheme } from '@/app/contexts/ThemeContext';
 import { PageHeader } from '@/app/components/PageHeader';
 import { ScreenWrapper, FAB_BOTTOM } from '@/app/components/ScreenWrapper';
+import { useToast } from '@/app/services/ToastContext';
 
 const iconMap: Record<string, string> = {
   '🎯':'bullseye-outline','🏖️':'umbrella-outline','🏠':'home-outline','🚗':'car-outline',
@@ -30,6 +31,7 @@ const ICONES = ['bullseye-outline','car-outline','home-outline','airplane-outlin
 
 export default function ObjectifsFinanciers() {
   const { colors: C } = useTheme();
+  const showToast = useToast();
   const s = useMemo(() => StyleSheet.create({
   menuBtn:{ width:32, height:32, borderRadius:Radius.full, backgroundColor:'rgba(255,255,255,0.15)', alignItems:'center', justifyContent:'center', marginLeft:'auto' },
 
@@ -70,6 +72,7 @@ export default function ObjectifsFinanciers() {
 
   // ── Card ──
   card:{ backgroundColor:C.white, borderRadius:Radius.md, padding:Spacing.sm, marginBottom:Spacing.sm, borderWidth:1, borderColor:C.border, shadowColor:C.dark, shadowOffset:{width:0,height:1}, shadowOpacity:0.04, shadowRadius:4, elevation:2 },
+  cardAtteint:{ borderLeftWidth:3, borderLeftColor:C.green },
   cardTopRow:{ flexDirection:'row', alignItems:'center', marginBottom:4 },
   cardMenuBtn:{ width:22, height:22, borderRadius:Radius.full, backgroundColor:C.surface, alignItems:'center', justifyContent:'center' },
   cardTitre:{ fontSize:14, fontWeight:'600', color:C.dark, marginLeft:Spacing.xs, flex:1 },
@@ -81,6 +84,8 @@ export default function ObjectifsFinanciers() {
   cardRestant:{ fontSize:10, color:C.muted },
   cardEcheance:{ fontSize:10, color:C.hint, marginLeft:'auto' },
   cardCreated:{ fontSize:10, color:C.hint },
+  atteintBadge:{ flexDirection:'row', alignItems:'center', alignSelf:'flex-start', backgroundColor:'#ECFDF5', borderRadius:Radius.full, paddingVertical:3, paddingHorizontal:8, marginTop:Spacing.xs, gap:4 },
+  atteintBadgeTxt:{ fontSize:11, fontWeight:'700', color:'#059669' },
 
   // ── FAB ──
   fabWrap:{ position:'absolute', right:Spacing.lg, alignItems:'center' },
@@ -505,6 +510,8 @@ export default function ObjectifsFinanciers() {
       setSaving(false);
       setSuccess(true);
       checkScale.value = withSpring(1, { damping: 8, stiffness: 150 });
+      showToast({ type: 'success', titre: editing ? 'Objectif modifié' : 'Objectif créé', message: `${titre.trim()} · ${fmt(mt)}`, icone: '🎯' });
+      notify('success', editing ? 'Objectif modifié' : 'Objectif créé', `${titre.trim()} · ${fmt(mt)}`);
       setTimeout(() => {
         setShowModal(false);
         setSuccess(false);
@@ -550,6 +557,8 @@ export default function ObjectifsFinanciers() {
       setWizSaving(false);
       setWizSuccess(true);
       wizardCheckScale.value = withSpring(1, { damping: 8, stiffness: 150 });
+      showToast({ type: 'success', titre: 'Objectif créé', message: `${wizTitre.trim()} · ${fmt(mt)}`, icone: '🎯' });
+      notify('success', 'Objectif créé', `${wizTitre.trim()} · ${fmt(mt)}`);
       setTimeout(() => {
         setShowWizard(false);
         setWizSuccess(false);
@@ -588,7 +597,7 @@ export default function ObjectifsFinanciers() {
       if (!mt || mt <= 0) { Alert.alert('Erreur', 'Montant invalide'); return; }
       const compte = comptes.find(c => c.id === alimCompteId);
       if (compte && mt > parseFloat(compte.solde_actuel)) {
-        Alert.alert('Solde insuffisant', `Le solde disponible (${fmt(compte.solde_actuel)} FCFA) est insuffisant pour ce versement.`);
+        Alert.alert('Solde insuffisant', `Le solde disponible (${fmt(compte.solde_actuel)}) est insuffisant pour ce versement.`);
         return;
       }
     }
@@ -610,14 +619,15 @@ export default function ObjectifsFinanciers() {
     if (!alimTarget) { Alert.alert('Erreur', 'Aucun objectif sélectionné'); return; }
     setAlimSaving(true);
     try {
-      await api.objectifs.alimenter(alimTarget.id, { compte_id: alimCompteId, montant: mt });
+      const updatedObj = await api.objectifs.alimenter(alimTarget.id, { compte_id: alimCompteId, montant: mt });
       await new Promise(r => setTimeout(r, 400));
-      const nouveauMontant = parseFloat(alimTarget.montant_actuel || 0) + mt;
-      const atteint = nouveauMontant >= parseFloat(alimTarget.montant_cible || 0);
+      const atteint = updatedObj?.statut === 'atteint';
       setAlimSaving(false);
       setAlimSuccess(true);
       setAlimAtteint(atteint);
       alimWizCheckScale.value = withSpring(1, { damping: 8, stiffness: 150 });
+      showToast({ type: atteint ? 'success' : 'success', titre: atteint ? 'Objectif atteint !' : 'Objectif alimenté', message: `${alimTarget.titre} · ${fmt(mt)}`, icone: atteint ? '🎉' : '💰' });
+      notify(atteint ? 'success' : 'info', atteint ? 'Objectif atteint !' : 'Objectif alimenté', `${alimTarget.titre} · ${fmt(mt)}`);
       if (!atteint) {
         setTimeout(() => {
           setShowAlimWizard(false);
@@ -653,6 +663,12 @@ export default function ObjectifsFinanciers() {
     if (!alimTarget) return;
     setArchiverSaving(true);
     try {
+      const currentObj = await api.objectifs.get(alimTarget.id);
+      if (!currentObj || parseFloat(currentObj.montant_actuel || 0) < parseFloat(currentObj.montant_cible || 0)) {
+        setArchiverSaving(false);
+        Alert.alert('Impossible', "Le montant cible n'est pas encore atteint.");
+        return;
+      }
       await api.objectifs.update(alimTarget.id, { statut: 'atteint' });
       setShowAlimWizard(false);
       setAlimSuccess(false);
@@ -678,6 +694,8 @@ export default function ObjectifsFinanciers() {
       await api.objectifs.remove(deleteTarget.id);
       setShowDelete(false);
       Alert.alert('🗑️ Supprimé', 'Objectif supprimé avec succès');
+      showToast({ type: 'info', titre: 'Objectif supprimé', message: `${deleteTarget.titre}`, icone: '🗑️' });
+      notify('info', 'Objectif supprimé', `${deleteTarget.titre}`);
       load();
     } catch (e: any) {
       Alert.alert('Erreur', e.message || 'Impossible de supprimer');
@@ -822,8 +840,9 @@ export default function ObjectifsFinanciers() {
             {filteredObjectifs.map((obj, i) => {
               const cp = pct(obj);
               const restant = Math.max(0, parseFloat(obj.montant_cible||0) - parseFloat(obj.montant_actuel||0));
+              const isAtteint = obj.statut === 'atteint' || cp >= 100;
               return (
-                <View key={obj.id||i} style={s.card}>
+                <View key={obj.id||i} style={[s.card, isAtteint && s.cardAtteint]}>
                   <View style={s.cardTopRow}>
                     <Ionicons name={toIcon(obj.icone) as any} size={16} color={C.text} style={{width:24, textAlign:'center'}} />
                     <Text style={s.cardTitre} numberOfLines={1}>{obj.titre}</Text>
@@ -833,7 +852,7 @@ export default function ObjectifsFinanciers() {
                     </TouchableOpacity>
                   </View>
 
-                  <Text style={s.cardMontant}>{fmt(obj.montant_actuel)} / {fmt(obj.montant_cible)} FCFA</Text>
+                  <Text style={s.cardMontant}>{fmt(obj.montant_actuel)} / {fmt(obj.montant_cible)}</Text>
 
                   <View style={s.cardBar}>
                     <View style={[s.cardFill, { width: `${Math.min(cp,100)}%`, backgroundColor: cp >= 100 ? C.green : cp > 70 ? C.warning : ACCENT }]} />
@@ -841,16 +860,22 @@ export default function ObjectifsFinanciers() {
 
                   <View style={s.cardInfoRow}>
                     <Text style={[s.cardPct, {color: cp >= 100 ? C.green : cp > 70 ? C.warning : C.muted}]}>{cp}%</Text>
-                    {restant > 0 && (
-                      <Text style={s.cardRestant}>Reste : {fmt(restant)} FCFA</Text>
+                    {!isAtteint && restant > 0 && (
+                      <Text style={s.cardRestant}>Reste : {fmt(restant)}</Text>
                     )}
-                    {obj.date_limite && (
+                    {!isAtteint && obj.date_limite && (
                       <Text style={s.cardEcheance}>Échéance : {formatDelai(obj.date_limite)}</Text>
                     )}
                     {obj.created_at && (
                       <Text style={s.cardCreated}>Créé le {formatDateCreation(obj.created_at)}</Text>
                     )}
                   </View>
+
+                  {isAtteint && (
+                    <View style={s.atteintBadge}>
+                      <Text style={s.atteintBadgeTxt}>✅ Objectif atteint</Text>
+                    </View>
+                  )}
                 </View>
               );
             })}
@@ -1105,7 +1130,7 @@ export default function ObjectifsFinanciers() {
                               keyboardType="numeric"
                             />
                             {wizMontant.trim() ? (
-                              <Text style={s.wizStep2Fmt}>{fmt(parseInt(wizMontant))} FCFA</Text>
+                              <Text style={s.wizStep2Fmt}>{fmt(parseInt(wizMontant))}</Text>
                             ) : null}
 
                             <View style={s.wizStep2Divider} />
@@ -1137,7 +1162,7 @@ export default function ObjectifsFinanciers() {
                                   <Ionicons name="bulb-outline" size={16} color={ACCENT} />
                                   <Text style={s.wizStep2EstimateText}>
                                     Vous devrez épargner environ{' '}
-                                    <Text style={{fontWeight:'800'}}>{fmt(monthly)} FCFA</Text> par mois
+                                    <Text style={{fontWeight:'800'}}>{fmt(monthly)}</Text> par mois
                                   </Text>
                                 </View>
                               );
@@ -1160,7 +1185,7 @@ export default function ObjectifsFinanciers() {
                                   <Text style={s.wizCompteIco}>{c.type_compte === 'banque' ? '🏦' : c.type_compte === 'momo' ? '📱' : '💵'}</Text>
                                   <View style={s.wizCompteInfo}>
                                     <Text style={s.wizCompteNom}>{c.nom_compte}</Text>
-                                    <Text style={s.wizCompteSolde}>{fmt(c.solde_actuel)} FCFA disponibles</Text>
+                                    <Text style={s.wizCompteSolde}>{fmt(c.solde_actuel)} disponibles</Text>
                                   </View>
                                   <View style={[s.wizCheckbox, selected && s.wizCheckboxOn]}>
                                     {selected && <Text style={s.wizCheckMark}>✓</Text>}
@@ -1188,7 +1213,7 @@ export default function ObjectifsFinanciers() {
                             </View>
                             <View style={s.wizSummaryRow}>
                               <Text style={s.wizSummaryLabel}>Montant cible</Text>
-                              <Text style={s.wizSummaryValue}>{fmt(parseInt(wizMontant) || 0)} FCFA</Text>
+                              <Text style={s.wizSummaryValue}>{fmt(parseInt(wizMontant) || 0)}</Text>
                             </View>
                             {wizDateLimite ? (
                               <View style={[s.wizSummaryRow, {borderBottomWidth:0}]}>
@@ -1256,7 +1281,7 @@ export default function ObjectifsFinanciers() {
                       <Text style={s.successIcon}>✓</Text>
                     </Animated.View>
                     <Text style={s.successTitle}>Objectif alimenté !</Text>
-                    <Text style={s.alimWizSuccessSub}>{fmt(parseInt(alimMontant))} FCFA ajoutés à {alimTarget?.titre}</Text>
+                    <Text style={s.alimWizSuccessSub}>{fmt(parseInt(alimMontant))} ajoutés à {alimTarget?.titre}</Text>
                     {alimAtteint && (
                       <>
                         <View style={s.alimAtteintBadge}>
@@ -1280,7 +1305,7 @@ export default function ObjectifsFinanciers() {
                         <Text style={{fontSize:29}}>{alimTarget?.icone || '🎯'}</Text>
                         <View style={s.alimWizHeaderInfo}>
                           <Text style={s.alimWizHeaderTitre} numberOfLines={1}>{alimTarget?.titre || 'Objectif'}</Text>
-                          <Text style={s.alimWizHeaderMontant}>{fmt(alimTarget?.montant_actuel)} / {fmt(alimTarget?.montant_cible)} FCFA</Text>
+                          <Text style={s.alimWizHeaderMontant}>{fmt(alimTarget?.montant_actuel)} / {fmt(alimTarget?.montant_cible)}</Text>
                         </View>
                         <View style={s.alimWizHeaderPctWrap}>
                           <Text style={s.alimWizHeaderPct}>{pct(alimTarget || {montant_cible:1, montant_actuel:0})}%</Text>
@@ -1309,7 +1334,7 @@ export default function ObjectifsFinanciers() {
                                   <Text style={s.wizCompteIco}>{c.type_compte === 'banque' ? '🏦' : c.type_compte === 'momo' ? '📱' : '💵'}</Text>
                                   <View style={s.wizCompteInfo}>
                                     <Text style={s.wizCompteNom}>{c.nom_compte}</Text>
-                                    <Text style={s.wizCompteSolde}>{fmt(c.solde_actuel)} FCFA disponibles</Text>
+                                    <Text style={s.wizCompteSolde}>{fmt(c.solde_actuel)} disponibles</Text>
                                   </View>
                                   <View style={[s.alimWizRadio, selected && s.alimWizRadioOn]}>
                                     {selected && <View style={s.alimWizRadioDot} />}
@@ -1342,7 +1367,7 @@ export default function ObjectifsFinanciers() {
                                 <Ionicons name="arrow-down" size={14} color={C.muted} />
                                 <View style={s.alimWizSoldeRow}>
                                   <Text style={s.alimWizSoldeLabel}>Après versement</Text>
-                                  <Text style={[s.alimWizSoldeVal, restant >= 0 ? {color:C.dark} : {color:C.danger}]}>{fmt(Math.max(0, restant))} FCFA</Text>
+                                  <Text style={[s.alimWizSoldeVal, restant >= 0 ? {color:C.dark} : {color:C.danger}]}>{fmt(Math.max(0, restant))}</Text>
                                 </View>
                               </View>
                             );
@@ -1358,7 +1383,7 @@ export default function ObjectifsFinanciers() {
                             <Text style={{fontSize:36}}>{alimTarget?.icone || '🎯'}</Text>
                             <View style={{flex:1}}>
                               <Text style={s.alimRecapHeaderTitre}>{alimTarget?.titre}</Text>
-                              <Text style={s.alimRecapHeaderProgress}>{fmt(alimTarget?.montant_actuel)} / {fmt(alimTarget?.montant_cible)} FCFA</Text>
+                              <Text style={s.alimRecapHeaderProgress}>{fmt(alimTarget?.montant_actuel)} / {fmt(alimTarget?.montant_cible)}</Text>
                             </View>
                           </View>
 
@@ -1376,7 +1401,7 @@ export default function ObjectifsFinanciers() {
                             <View style={s.alimRecapRow}>
                               <Ionicons name="cash-outline" size={16} color={C.muted} />
                               <Text style={s.alimRecapLabel}>Montant du versement</Text>
-                              <Text style={s.alimRecapMontant}>{fmt(parseInt(alimMontant) || 0)} FCFA</Text>
+                              <Text style={s.alimRecapMontant}>{fmt(parseInt(alimMontant) || 0)}</Text>
                             </View>
 
                             <View style={s.alimRecapDivider} />
@@ -1384,7 +1409,7 @@ export default function ObjectifsFinanciers() {
                             <View style={s.alimRecapRow}>
                               <Ionicons name="trending-up-outline" size={16} color={C.muted} />
                               <Text style={s.alimRecapLabel}>Nouveau total épargné</Text>
-                              <Text style={s.alimRecapValue}>{fmt((parseFloat(alimTarget?.montant_actuel||0) + parseInt(alimMontant||0)))} FCFA</Text>
+                              <Text style={s.alimRecapValue}>{fmt((parseFloat(alimTarget?.montant_actuel||0) + parseInt(alimMontant||0)))}</Text>
                             </View>
                           </View>
                         </View>

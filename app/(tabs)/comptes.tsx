@@ -7,11 +7,12 @@ import { useTheme } from '@/app/contexts/ThemeContext';
 import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { PageHeader } from '@/app/components/PageHeader';
-import api from '@/app/services/api';
+import api, { notify } from '@/app/services/api';
 import { comptesCache } from '@/app/services/cache';
 import { Spacing, Radius } from '@/constants/spacing';
 import { Ionicons } from '@expo/vector-icons';
 import { fmtCurrency } from '@/app/utils/format';
+import { useToast } from '@/app/services/ToastContext';
 
 
 
@@ -45,6 +46,7 @@ const typeLabel = (t: string, tp?: string) => {
 
 export default function Comptes() {
   const { colors: C, isDark } = useTheme();
+  const showToast = useToast();
   const styles = useMemo(() => StyleSheet.create({
   content:{ padding:Spacing.lg, flexGrow:1 },
   emptyWrap:{ alignItems:'center', paddingVertical:60 },
@@ -302,6 +304,8 @@ export default function Comptes() {
       await new Promise(r => setTimeout(r, 400));
       setSuccess(true);
       checkScale.value = withSpring(1, { damping: 8, stiffness: 150 });
+      showToast({ type: 'success', titre: editing ? 'Compte modifié' : 'Compte créé', message: `${nomCompte.trim()}`, icone: '🏦' });
+      notify('success', editing ? 'Compte modifié' : 'Compte créé', `${nomCompte.trim()}`);
       setTimeout(() => {
         setShowModal(false);
         setSuccess(false);
@@ -340,6 +344,8 @@ export default function Comptes() {
       await new Promise(r => setTimeout(r, 400));
       setDeleteSuccess(true);
       deleteCheckScale.value = withSpring(1, { damping: 8, stiffness: 150 });
+      showToast({ type: 'info', titre: 'Compte supprimé', message: `${deleteTarget.nom_compte}`, icone: '🗑️' });
+      notify('info', 'Compte supprimé', `${deleteTarget.nom_compte}`);
       setTimeout(() => {
         setShowDeleteModal(false);
         setDeleteSuccess(false);

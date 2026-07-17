@@ -7,9 +7,9 @@ router.use(auth);
 
 router.get('/', notificationsController.getAll);
 router.get('/non-lues', notificationsController.getNonLues);
+router.put('/tout-lire', notificationsController.marquerToutesLues);
 router.delete('/:id', notificationsController.supprimer);
 router.put('/:id/lire', notificationsController.marquerLue);
-router.put('/tout-lire', notificationsController.marquerToutesLues);
 router.post('/', notificationsController.creerNotification);
 
 module.exports = router;

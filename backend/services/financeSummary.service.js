@@ -51,7 +51,7 @@ async function getSummary(utilisateurId, debut, fin) {
 
   const revenus = parseFloat(revRow.total) || 0;
   const depenses = parseFloat(depRow.total) || 0;
-  const epargne = parseFloat(objRow.epargne) || 0;
+  const epargne = revenus - depenses;
   const objectifCible = parseFloat(objRow.cible) || 0;
   const budgetUtilise = parseFloat(budRow.utilise) || 0;
   const budgetReserve = parseFloat(budRow.reserve) || 0;
